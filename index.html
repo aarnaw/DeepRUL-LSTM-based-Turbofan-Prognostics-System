@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aircraft Engine Cockpit</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+    :root {
+      --bg: #01060e;
+      --panel-bg: rgba(7, 18, 38, 0.65);
+      --glass-border: rgba(0, 229, 255, 0.2);
+      --primary: #00e5ff;
+      --primary-dim: rgba(0, 229, 255, 0.2);
+      --healthy: #39ff14;
+      --warning: #ffb703;
+      --critical: #ff003c;
+      --text: #dcf2f5;
+      --text-muted: #5b798e;
+      --glow-primary: 0 0 10px rgba(0, 229, 255, 0.5);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      background: radial-gradient(circle at 50% 50%, #061122 0%, var(--bg) 100%);
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      padding: 2vw;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    @keyframes flicker {
+      0% { opacity: 1; }
+      5% { opacity: 0.8; }
+      10% { opacity: 1; }
+      50% { opacity: 1; }
+      55% { opacity: 0.3; }
+      60% { opacity: 1; }
+      100% { opacity: 1; }
+    }
+    .flicker { animation: flicker 4s infinite; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--glass-border);
+      padding-bottom: 10px;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    header h1 { font-size: 1.5rem; text-shadow: var(--glow-primary); color: var(--primary); }
+    .sys-info { color: var(--text-muted); font-size: 0.9rem; text-align: right; }
+
+    .cockpit {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-rows: auto auto;
+      gap: 20px;
+      flex: 1;
+    }
+
+    .panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      padding: 20px;
+      backdrop-filter: blur(10px);
+      box-shadow: inset 0 0 20px rgba(0, 229, 255, 0.05);
+      position: relative;
+      overflow: hidden;
+    }
+    .panel::after {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
+      background-size: 100% 4px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .panel-title {
+      font-size: 0.8rem;
+      color: var(--primary);
+      text-transform: uppercase;
+      margin-bottom: 15px;
+      letter-spacing: 1px;
+      border-bottom: 1px dotted var(--glass-border);
+      padding-bottom: 5px;
+    }
+
+    .gauge-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
+    .gauge-svg { width: 100%; max-width: 320px; filter: drop-shadow(0 0 8px rgba(0,229,255,0.3)); transition: all 0.5s ease; }
+    .gauge-arc { fill: none; stroke: rgba(255,255,255,0.05); stroke-width: 15; stroke-linecap: butt; }
+    .gauge-value-arc { fill: none; stroke: var(--primary); stroke-width: 15; stroke-linecap: butt; transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+    .gauge-ticks { stroke: var(--glass-border); stroke-width: 2; }
+    
+    .rul-big { font-size: 4rem; font-weight: bold; fill: var(--text); text-anchor: middle; text-shadow: 0 0 15px rgba(255,255,255,0.3); }
+    .rul-label { font-size: 1rem; fill: var(--primary); text-anchor: middle; text-transform: uppercase; letter-spacing: 2px; }
+
+    .diag-stack { display: flex; flex-direction: column; gap: 20px; height: 100%; }
+    .diag-card { border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); padding: 15px; border-radius: 4px; z-index: 20; position: relative;}
+    .diag-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px; }
+    
+    .status-text { font-size: 2rem; font-weight: bold; text-shadow: 0 0 10px currentColor; }
+    .status-healthy { color: var(--healthy); }
+    .status-warning { color: var(--warning); animation: pulse-warn 2s infinite; }
+    .status-critical { color: var(--critical); animation: pulse-crit 1s infinite alternate; }
+
+    @keyframes pulse-warn { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+    @keyframes pulse-crit { 0% { opacity: 1; } 100% { opacity: 0.3; } }
+
+    .unc-text { font-size: 1.5rem; color: var(--text); }
+    
+    .lifecycle-track {
+      width: 100%; height: 12px; background: rgba(0,0,0,0.5);
+      border: 1px solid var(--glass-border); border-radius: 6px;
+      position: relative; margin-top: 10px; overflow: hidden;
+    }
+    .lifecycle-fill {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, var(--healthy) 0%, var(--warning) 60%, var(--critical) 100%);
+      transition: width 1s ease;
+    }
+    .lifecycle-marker {
+      position: absolute; top: -4px; bottom: -4px; width: 4px;
+      background: #fff; box-shadow: 0 0 8px #fff;
+      transition: left 1s ease; left: 0%;
+    }
+    .lifecycle-labels { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-muted); margin-top: 5px; }
+
+    .controls-panel { display: flex; flex-direction: column; gap: 20px; z-index: 20; position: relative;}
+    
+    .btn-arm {
+      background: transparent; border: 2px solid var(--primary); color: var(--primary);
+      padding: 15px; font-family: inherit; font-size: 1rem; text-transform: uppercase;
+      font-weight: bold; letter-spacing: 2px; cursor: pointer; position: relative;
+      overflow: hidden; transition: all 0.2s; border-radius: 4px;
+      text-shadow: var(--glow-primary); box-shadow: inset 0 0 10px rgba(0, 229, 255, 0.1);
+    }
+    .btn-arm:hover { background: var(--primary-dim); box-shadow: 0 0 15px var(--primary-dim); }
+    .btn-arm:active { transform: scale(0.98); }
+    .btn-arm:disabled { border-color: var(--text-muted); color: var(--text-muted); cursor: not-allowed; text-shadow: none; box-shadow: none; background: transparent; }
+
+    .dnd-zone {
+      border: 2px dashed var(--glass-border); border-radius: 8px; padding: 30px 20px;
+      text-align: center; transition: all 0.3s ease; background: rgba(0, 0, 0, 0.2);
+      flex: 1; display: flex; flex-direction: column; justify-content: center; cursor: pointer;
+    }
+    .dnd-zone.dragover { border-color: var(--primary); background: var(--primary-dim); box-shadow: 0 0 20px var(--primary-dim); }
+    .dnd-icon { font-size: 2rem; margin-bottom: 10px; color: var(--text-muted); }
+    .dnd-text { font-size: 0.9rem; color: var(--text); margin-bottom: 5px; }
+    .dnd-subtext { font-size: 0.7rem; color: var(--text-muted); }
+    #csv-upload { display: none; }
+
+    .loading-sequence { display: none; flex-direction: column; gap: 10px; font-size: 0.8rem; color: var(--primary); z-index: 20; position: relative;}
+    .log-line { border-left: 2px solid var(--primary); padding-left: 8px; animation: slideIn 0.3s ease forwards; opacity: 0; }
+    @keyframes slideIn { from { transform: translateX(-10px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    .telemetry-container { grid-column: 1 / -1; height: 250px; z-index: 20; position: relative;}
+    
+    @media (max-width: 1024px) { .cockpit { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1 class="flicker">ENG-FD4 // TELEMETRY LINK</h1>
+    <div class="sys-info">
+      <div>SYS-STATUS: <span style="color:var(--primary)">ONLINE</span></div>
+      <div>SECURE UPLINK: ACTIVE</div>
+    </div>
+  </header>
+
+  <div class="cockpit">
+    
+    <div class="panel">
+      <div class="panel-title">Primary Engine Gauge</div>
+      <div class="gauge-container">
+        <svg class="gauge-svg" viewBox="0 0 200 150">
+          <defs>
+            <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#ff003c" />
+              <stop offset="30%" stop-color="#ffb703" />
+              <stop offset="60%" stop-color="#39ff14" />
+              <stop offset="100%" stop-color="#00e5ff" />
+            </linearGradient>
+          </defs>
+          <path class="gauge-arc" d="M 20 130 A 80 80 0 0 1 180 130" />
+          <path id="gauge-fill" class="gauge-value-arc" stroke="url(#arcGrad)" stroke-dasharray="252" stroke-dashoffset="252" d="M 20 130 A 80 80 0 0 1 180 130" />
+          <path class="gauge-ticks" d="M 10 130 L 20 130 M 190 130 L 180 130 M 100 40 L 100 50 M 35 70 L 42 77 M 165 70 L 158 77" />
+          <text id="rul-text" class="rul-big" x="100" y="110">--</text>
+          <text class="rul-label" x="100" y="140">Cycles Rsrv</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Diagnostic Sensors</div>
+      <div class="diag-stack">
+        <div class="diag-card">
+          <div class="diag-label">Structural Integrity</div>
+          <div id="status-text" class="status-text status-warning" style="color: #5b798e;">AWAITING DATA</div>
+        </div>
+        <div class="diag-card">
+          <div class="diag-label">Prediction Confidence (95% CI)</div>
+          <div class="unc-text" id="unc-text">± -- CYC</div>
+          <div style="font-size:0.7rem; color:var(--text-muted); margin-top:5px;" id="ci-text">RANGE: [--, --]</div>
+        </div>
+        <div class="diag-card">
+          <div class="diag-label">Lifecycle Timeline</div>
+          <div class="lifecycle-track">
+            <div id="lc-fill" class="lifecycle-fill"></div>
+            <div id="lc-marker" class="lifecycle-marker" style="display:none;"></div>
+          </div>
+          <div class="lifecycle-labels">
+            <span>START</span>
+            <span>FAILURE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Data Uplink Port</div>
+      <div class="controls-panel" id="controls-view">
+        <button id="btn-simulate" class="btn-arm">[ Initialize Simulation ]</button>
+        <div style="text-align:center; color:var(--glass-border); font-size:0.8rem;">- OR -</div>
+        <div id="drop-zone" class="dnd-zone">
+          <div class="dnd-icon">⬇</div>
+          <div class="dnd-text">INJECT ENGINE TELEMETRY</div>
+          <div class="dnd-subtext">(Drag & Drop CSV payload)</div>
+          <input type="file" id="csv-upload" accept=".csv" />
+        </div>
+      </div>
+      <div id="loading-view" class="loading-sequence">
+        <div class="log-line" id="l1" style="animation-delay: 0s;">Establishing secure socket...</div>
+        <div class="log-line" id="l2" style="animation-delay: 0.4s;">Parsing telemetry packets <span class="flicker">██████</span></div>
+        <div class="log-line" id="l3" style="animation-delay: 0.8s;">Validating sequence integrity [OK]</div>
+        <div class="log-line" id="l4" style="animation-delay: 1.2s;">Passing to LSTM inference engine...</div>
+      </div>
+    </div>
+
+    <div class="panel telemetry-container">
+      <div class="panel-title">Real-Time Forecast Trajectory</div>
+      <div style="position:relative; height:calc(100% - 25px); width:100%;">
+        <canvas id="telemetryChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <audio id="sfx-blip" src="data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YRAAAABW+1X7VftV+1X7VftV+1X7Vfs=" preload="auto"></audio>
+
+  <script>
+    const API_URL = "http://localhost:8000/predict_rul";
+    const SAMPLE_URL = "../data/processed/test_sequences_sample.json";
+    const MAX_RUL = 140;
+
+    const gaugeFill = document.getElementById("gauge-fill");
+    const rulText = document.getElementById("rul-text");
+    const statusText = document.getElementById("status-text");
+    const uncText = document.getElementById("unc-text");
+    const ciText = document.getElementById("ci-text");
+    const lcFill = document.getElementById("lc-fill");
+    const lcMarker = document.getElementById("lc-marker");
+    
+    const btnSimulate = document.getElementById("btn-simulate");
+    const dropZone = document.getElementById("drop-zone");
+    const csvInput = document.getElementById("csv-upload");
+    const controlsView = document.getElementById("controls-view");
+    const loadingView = document.getElementById("loading-view");
+
+    const chartData = { labels: [], datasets: [{ label: 'Predicted RUL', data: [], borderColor: '#00e5ff', backgroundColor: 'rgba(0, 229, 255, 0.1)', borderWidth: 2, pointBackgroundColor: '#fff', pointRadius: 3, pointBorderColor: '#00e5ff', fill: true, tension: 0.3 }] };
+    
+    const tChart = new Chart(document.getElementById('telemetryChart').getContext('2d'), {
+      type: 'line',
+      data: chartData,
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 800, easing: 'easeOutQuart' },
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.05)', display: true }, ticks: { color: '#5b798e', font: {family: 'Share Tech Mono'} } },
+          y: { grid: { color: 'rgba(255,255,255,0.05)', display: true }, ticks: { color: '#5b798e', font: {family: 'Share Tech Mono'} }, beginAtZero: true, suggestedMax: MAX_RUL }
+        }
+      }
+    });
+
+    let sampleCache = null; let tIndex = 0;
+    function playBlip() { try { document.getElementById('sfx-blip').play().catch(()=>{}); } catch(e){} }
+
+    function updateCockpit(res) {
+      playBlip();
+      const rul = res.rul;
+      const constrainedRul = Math.min(Math.max(rul, 0), MAX_RUL);
+      const frac = constrainedRul / MAX_RUL;
+      gaugeFill.style.strokeDashoffset = 252 - (252 * frac);
+      
+      let displayRul = 0; const intRul = Math.round(rul);
+      const intv = setInterval(() => {
+        if(displayRul >= intRul) { clearInterval(intv); displayRul = intRul; }
+        rulText.textContent = displayRul;
+        displayRul += Math.max(1, Math.ceil(intRul / 10));
+      }, 30);
+
+      statusText.className = "status-text flicker";
+      if (rul > 80) { statusText.textContent = "HEALTHY"; statusText.classList.add("status-healthy"); }
+      else if (rul > 40) { statusText.textContent = "WARNING"; statusText.classList.add("status-warning"); }
+      else { statusText.textContent = "CRITICAL"; statusText.classList.add("status-critical"); }
+
+      uncText.textContent = `± ${res.uncertainty.toFixed(1)} CYC`;
+      ciText.textContent = `RANGE: [${res.confidence_interval_95[0].toFixed(1)}, ${res.confidence_interval_95[1].toFixed(1)}]`;
+
+      const spentFrac = Math.max(0, 1 - frac);
+      lcFill.style.width = `${spentFrac * 100}%`;
+      lcMarker.style.display = 'block';
+      lcMarker.style.left = `${spentFrac * 100}%`;
+
+      tIndex++; chartData.labels.push(`T+${tIndex}`); chartData.datasets[0].data.push(rul);
+      if(chartData.labels.length > 20) { chartData.labels.shift(); chartData.datasets[0].data.shift(); }
+      tChart.update();
+    }
+
+    async function loadSamples() {
+      if (sampleCache) return sampleCache;
+      const res = await fetch(SAMPLE_URL);
+      if (!res.ok) throw new Error("Sample data missing.");
+      sampleCache = (await res.json()).samples; return sampleCache;
+    }
+
+    function resetLoadingAnim() {
+      const els = [document.getElementById('l1'), document.getElementById('l2'), document.getElementById('l3'), document.getElementById('l4')];
+      els.forEach(el => { el.style.animation = 'none'; el.offsetHeight; el.style.animation = null; });
+    }
+
+    async function runInference(payload) {
+      controlsView.style.display = 'none'; loadingView.style.display = 'flex'; resetLoadingAnim();
+      try {
+        await new Promise(r => setTimeout(r, 1600)); 
+        const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (!res.ok) throw new Error("Inference failed.");
+        updateCockpit(await res.json());
+      } catch (err) { alert("- SYS ERR -\n" + err.message); } 
+      finally { controlsView.style.display = 'flex'; loadingView.style.display = 'none'; }
+    }
+
+    btnSimulate.addEventListener("click", async () => {
+      btnSimulate.disabled = true;
+      try {
+        const samples = await loadSamples();
+        await runInference({ engine_id: Math.floor(Math.random()*100)+1, sequence: samples[Math.floor(Math.random() * samples.length)] });
+      } catch(e) { alert("SYS ERR: " + e.message); }
+      btnSimulate.disabled = false;
+    });
+
+    dropZone.addEventListener("click", (e) => { 
+      if (e.target !== csvInput) csvInput.click(); 
+    });
+    dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("dragover"); });
+    dropZone.addEventListener("dragleave", () => { dropZone.classList.remove("dragover"); });
+    dropZone.addEventListener("drop", async (e) => { e.preventDefault(); dropZone.classList.remove("dragover"); const f = e.dataTransfer?.files[0]; if(f) processFile(f); });
+    csvInput.addEventListener("change", (e) => { const f = e.target.files[0]; if(f) processFile(f); e.target.value = ''; });
+
+    async function processFile(file) { await runInference({ engine_id: 99, csv_data: await file.text() }); }
+  </script>
+</body>
+</html>

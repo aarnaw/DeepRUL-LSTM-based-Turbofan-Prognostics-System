@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# Generated training/inference artifacts
+data/processed/*
+!data/processed/.gitkeep
+
+model/*.pth
+model/*.png
